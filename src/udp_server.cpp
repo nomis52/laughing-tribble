@@ -19,6 +19,9 @@ DEFINE_uint16(port, 5569, "The port to listen on");
 DEFINE_uint16(packet_limit, 0, "Exit after this many packets");
 DEFINE_string(mcast_group, "239.255.255.250", "The multicast IP to listen on");
 DEFINE_string(mcast_iface, "", "The multicast interface to use");
+DEFINE_string(reply_address, "239.255.255.251",
+              "The IP to send responses to, set to 0.0.0.0 to use the client IP"
+             );
 DEFINE_default_bool(stdin_handler, true, "Enable stdin handler");
 
 using ola::NewCallback;
@@ -60,6 +63,11 @@ class Server {
   }
 
   bool Init() {
+    if (!IPV4Address::FromString(FLAGS_reply_address, &m_reply_addr)) {
+      OLA_INFO << "Invalid reply address " << FLAGS_reply_address;
+      return false;
+    }
+
     if (!IPV4Address::FromString(FLAGS_mcast_group, &m_mcast_group)) {
       OLA_INFO << "Invalid mcast group " << FLAGS_mcast_group;
       return false;
@@ -122,6 +130,7 @@ class Server {
   auto_ptr<ola::io::StdinHandler> m_stdin_handler;
   ola::network::Interface m_interface;
   IPV4Address m_mcast_group;
+  IPV4Address m_reply_addr;
   auto_ptr<UDPSocket> m_socket;
   unsigned int m_packet_count;
 
@@ -138,9 +147,12 @@ class Server {
     }
 
     m_packet_count++;
+    IPV4SocketAddress dest;
+    dest = (m_reply_addr == IPV4Address::WildCard() ?
+            client : IPV4SocketAddress(m_reply_addr, client.Port()));
 
-    if (m_socket->SendTo(data, data_size, client)) {
-      LOG_INFO << "SendTo: " << client;
+    if (m_socket->SendTo(data, data_size, dest)) {
+      LOG_INFO << "SendTo: " << dest;
     } else {
       OLA_WARN << "Failed to send";
     }
